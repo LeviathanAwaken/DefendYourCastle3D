@@ -98,6 +98,47 @@ class BlenderObject {
         }
         fin.close();
     }
+    BlenderObject() {
+        has_normals = 1;
+        ifstream fin("StickFigure.obj");
+        char line[100];
+        fin.getline(line, 100);
+        while (!fin.eof()) {
+            //look for v
+            if (*line == 'v') {
+                float pt[3];
+                sscanf(line+2, "%f %f %f", &pt[0], &pt[1], &pt[2]);
+                vert[nverts][0] = pt[0];
+                vert[nverts][1] = pt[1];
+                vert[nverts][2] = pt[2];
+                ++nverts;
+            }
+            //look for vn
+            if (*line == 'v' && line[1] == 'n') {
+                float pt[3];
+                sscanf(line+3, "%f %f %f", &pt[0], &pt[1], &pt[2]);
+                normal[nnorms][0] = pt[0];
+                normal[nnorms][1] = pt[1];
+                normal[nnorms][2] = pt[2];
+                ++nnorms;
+            }
+            //look for f
+            if (*line == 'f') {
+                int f[3], n[3];
+                sscanf(line+2, "%i//%i %i//%i %i//%i",
+                        &f[0], &n[0], &f[1], &n[1], &f[2], &n[2]);
+                face[nfaces][0] = f[0]-1;
+                face[nfaces][1] = f[1]-1;
+                face[nfaces][2] = f[2]-1;
+                fnorm[nfaces][0] = n[0]-1;
+                fnorm[nfaces][1] = n[1]-1;
+                fnorm[nfaces][2] = n[2]-1;
+                ++nfaces;
+            }
+            fin.getline(line, 100);
+        }
+        fin.close();
+    }
     BlenderObject(const char *fname, int no) {
         has_normals = 1;
         ifstream fin(fname);
@@ -139,6 +180,10 @@ class BlenderObject {
         }
         fin.close();
     }
+    void move(Flt x, Flt y, Flt z) {
+        glTranslatef(x,y,z);
+        draw();
+    }
     void draw() {
         if (!has_normals) {
             glBegin(GL_TRIANGLES);
@@ -169,7 +214,7 @@ class BlenderObject {
             glEnd();
         }
     }
-} obj("Castle.obj",1);
+} castle("Castle.obj", 1), terrain("terrain.obj", 1);
 
 class Smoke {
     public:
@@ -190,8 +235,8 @@ class Camera {
         Vec direction;
     public:
         Camera() {
-            VecMake(20, 40, 0, position);
-            VecMake(-1, -0.1, 0, direction);
+            VecMake(80, 23, 30, position);
+            VecMake(-8, -0.6, -1, direction);
         }
         void translate(float x, float y, float z) {
             position[0] += x;
@@ -304,10 +349,13 @@ class Global {
         Flt aspectRatio;
         Vec cameraPos;
         Flt cameraAngle;
+        Flt moveInc;
         int sorting;
         int billboarding;
         Camera camera;
         GLfloat lightPosition[4];
+        BlenderObject objs[10];
+        int xDirs[10];
         struct timespec smokeStart, smokeTime;
         Smoke *smoke;
         int nsmokes;
@@ -318,6 +366,7 @@ class Global {
         }
         Global() {
             //constructor
+            moveInc = 0.0;
             xres=640;
             yres=480;
             aspectRatio = (GLfloat)xres / (GLfloat)yres;
@@ -325,6 +374,7 @@ class Global {
             cameraAngle = 0.0;
             sorting = 1;
             billboarding = 1;
+            
             //VecMake(0.0, 1.0, 8.0, cameraPosition);
             //light is up high, right a little, toward a little
             VecMake(100.0f, 240.0f, 40.0f, lightPosition);
@@ -436,6 +486,7 @@ class X11_wrapper {
 int main()
 {
     g.init_opengl();
+    g.init();
     int done = 0;
     while (!done) {
         while (x11.getXPending()) {
@@ -448,12 +499,17 @@ int main()
         g.render();
         x11.swapBuffers();
     }
-    cleanup_fonts();
+    //cleanup_fonts();
     return 0;
 }
 
 void Global::init() {
     //Place general program initializations here.
+    srand(time(0));
+    for (int i=0; i<10; i++) {
+        int randNum = (rand() % (20+1+20)) + -20;
+        g.xDirs[i] = randNum;
+    }
 }
 
 void Global::init_opengl()
@@ -481,7 +537,7 @@ void Global::init_opengl()
     glEnable(GL_LIGHT0);
     //Do this to allow fonts
     glEnable(GL_TEXTURE_2D);
-    initialize_fonts();
+    //initialize_fonts();
     //
     //Test the stencil buffer on this computer.
     //
@@ -545,12 +601,12 @@ void Global::check_mouse(XEvent *e)
 int Global::check_keys(XEvent *e)
 {
     //Was there input from the keyboard?
-    static int ctrl = 0;
+    static int shift = 0;
     static int tab = 0;
     if (e->type == KeyPress) {
         int key = (XLookupKeysym(&e->xkey, 0) & 0x0000ffff);
-        if (key == XK_Control_L) {
-            ctrl = 1;
+        if (key == XK_Shift_L) {
+            shift = 1;
             return 0;
         } 
         if (key == XK_Tab) {
@@ -560,8 +616,8 @@ int Global::check_keys(XEvent *e)
     }
     if (e->type == KeyRelease) {
         int key = (XLookupKeysym(&e->xkey, 0) & 0x0000ffff);
-        if (key == XK_Control_L) {
-            ctrl = 0;
+        if (key == XK_Shift_L) {
+            shift = 0;
             return 0;
         }	
         if (key == XK_Tab) {
@@ -575,16 +631,26 @@ int Global::check_keys(XEvent *e)
             case XK_1:
                 break;
             case XK_Right:
-                    g.camera.lookLeftRight(0.05);
-                    g.camera.moveLeftRight(1.0);
+                // g.camera.lookLeftRight(0.05);
+                // g.camera.moveLeftRight(1.0);
+                if (shift) {
+                     g.camera.lookLeftRight(-0.1);
+                } else {
+                     g.camera.moveLeftRight(1.0);
+                }
                 break;
             case XK_Left:
-                    g.camera.lookLeftRight(-0.05);
-                    g.camera.moveLeftRight(-1.0);
+                // g.camera.lookLeftRight(-0.05);
+                // g.camera.moveLeftRight(-1.0);
+                if (shift) {
+                     g.camera.lookLeftRight(0.1);
+                } else {
+                     g.camera.moveLeftRight(-1.0);
+                }
                 break;
             case XK_Up:
                 //g.camera.position[1] += 0.2;
-                if (ctrl) {
+                if (shift) {
                     g.camera.lookUpDown(-0.1);
                 } else if (tab) {
                     g.camera.moveForwardBack(1.0);
@@ -593,7 +659,7 @@ int Global::check_keys(XEvent *e)
                 }
                 break;
             case XK_Down:
-                if (ctrl) {
+                if (shift) {
                     g.camera.lookUpDown(0.1);
                 } else if (tab) {
                     g.camera.moveForwardBack(-1.0);
@@ -602,7 +668,7 @@ int Global::check_keys(XEvent *e)
                 }
                 break;
             case XK_r:
-                if (ctrl) {
+                if (shift) {
                     
                 }
               	break;
@@ -859,7 +925,7 @@ void drawSmoke()
 
             g.smoke[i].dist = sqrt(formulaX + formulaY + formulaZ);
         }
-        for(int i; i<g.nsmokes -1; i++){
+        for(int i = 0; i<g.nsmokes -1; i++){
             for(int j=0; j<g.nsmokes-i-1; j++){
                 if(g.smoke[j].dist < g.smoke[j+1].dist){
                     //swap(arr[j], arr[j+1]);
@@ -980,12 +1046,12 @@ void Global::physics()
     }
 }
 
-//void throughBirdHouse() 
-//{
-//    for (int i=0; i<100)
-//
-//
-//}
+void drawObject(BlenderObject obj,Flt x, Flt y, Flt z) {
+    if(z < 50.0){
+        glTranslatef(x,y,z);
+    }
+    obj.draw();
+}
 
 void Global::render()
 {
@@ -1003,18 +1069,37 @@ void Global::render()
     Vec up = { 0.0, 1.0, 0.0 };
     gluLookAt(
             g.camera.position[0], g.camera.position[1], g.camera.position[2],
-            -30.0, -30.0, 50.0,
+            g.camera.position[0]+g.camera.direction[0],
+            g.camera.position[1]+g.camera.direction[1],
+            g.camera.position[2]+g.camera.direction[2],
             up[0], up[1], up[2]);
+    // gluLookAt(
+    //         g.camera.position[0], g.camera.position[1], g.camera.position[2],
+    //         -30.0, -30.0, 50.0,
+    //         up[0], up[1], up[2]);
     glLightfv(GL_LIGHT0, GL_POSITION, g.lightPosition);
     //
-    drawGround();
+    //drawGround();
     //
-    glColor3ub(255, 255, 0);
-    obj.draw();
-    //
+   
+    g.moveInc += 0.1;
+
+    glColor3ub(100, 100, 100);
+    drawObject(castle, 0.0,0.0,60.0);
+    
+    glColor3ub(20,255,20);  
+    glScalef(4.0f,4.0f,5.0f);
+    drawObject(terrain, 0.0,0.0,0.0);
+
+    for(int i=0; i<10; i++) {
+        drawObject(g.objs[i],g.xDirs[i],0.0,g.moveInc); 
+    }
+    glColor3ub(0, 0, 0);
+    
     glDisable(GL_LIGHTING);
     drawSmoke();
     glEnable(GL_LIGHTING);
+
     //switch to 2D mode
     //
     glViewport(0, 0, g.xres, g.yres);
@@ -1026,7 +1111,6 @@ void Global::render()
     r.bot = g.yres - 20;
     r.left = 10;
     r.center = 0;
-    ggprint8b(&r, 16, 0x00887766, "fps framework");
     glPopAttrib();
 }
 
