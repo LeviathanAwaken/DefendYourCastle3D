@@ -216,6 +216,28 @@ class BlenderObject {
     }
 } castle("Castle.obj", 1), terrain("terrain.obj", 1);
 
+class Pointer {
+    public:
+        Vec pos;
+        //Vec vert[16];
+        Flt radius;
+        Flt alpha;
+        int nsegments;
+    public:
+        Pointer() {
+            pos[0] = 0.0;
+            pos[1] = 0.2;
+            pos[2] = 20.0;
+            nsegments = 20;
+            radius = 4;
+        }
+        void translate(float x, float y, float z) {
+            pos[0] += x;
+            pos[1] += y;
+            pos[2] += z;
+        }
+}p;
+
 class Smoke {
     public:
         Vec pos;
@@ -235,8 +257,8 @@ class Camera {
         Vec direction;
     public:
         Camera() {
-            VecMake(80, 23, 30, position);
-            VecMake(-8, -0.6, -1, direction);
+            VecMake(80, 30, 30, position);
+            VecMake(-8, -0.8, -1, direction);
         }
         void translate(float x, float y, float z) {
             position[0] += x;
@@ -633,39 +655,43 @@ int Global::check_keys(XEvent *e)
             case XK_Right:
                 // g.camera.lookLeftRight(0.05);
                 // g.camera.moveLeftRight(1.0);
-                if (shift) {
-                     g.camera.lookLeftRight(-0.1);
-                } else {
-                     g.camera.moveLeftRight(1.0);
-                }
+                p.translate(0.0,0.0,-1.0);
+                // if (shift) {
+                //      g.camera.lookLeftRight(-0.1);
+                // } else {
+                //      g.camera.moveLeftRight(1.0);
+                // }
                 break;
             case XK_Left:
                 // g.camera.lookLeftRight(-0.05);
                 // g.camera.moveLeftRight(-1.0);
-                if (shift) {
-                     g.camera.lookLeftRight(0.1);
-                } else {
-                     g.camera.moveLeftRight(-1.0);
-                }
+                p.translate(0.0,0.0,1.0);
+                // if (shift) {
+                //      g.camera.lookLeftRight(0.1);
+                // } else {
+                //      g.camera.moveLeftRight(-1.0);
+                // }
                 break;
             case XK_Up:
                 //g.camera.position[1] += 0.2;
-                if (shift) {
-                    g.camera.lookUpDown(-0.1);
-                } else if (tab) {
-                    g.camera.moveForwardBack(1.0);
-                } else {
-                    g.camera.translate(0.0, 0.2, 0.0);
-                }
+                p.translate(-1.0,0.0,0.0);
+                // if (shift) {
+                //     g.camera.lookUpDown(-0.1);
+                // } else if (tab) {
+                //     g.camera.moveForwardBack(1.0);
+                // } else {
+                //     g.camera.translate(0.0, 0.2, 0.0);
+                // }
                 break;
             case XK_Down:
-                if (shift) {
-                    g.camera.lookUpDown(0.1);
-                } else if (tab) {
-                    g.camera.moveForwardBack(-1.0);
-                } else {
-                    g.camera.translate(0.0, -0.2, 0.0);
-                }
+                p.translate(1.0,0.0,0.0);
+                // if (shift) {
+                //     g.camera.lookUpDown(0.1);
+                // } else if (tab) {
+                //     g.camera.moveForwardBack(-1.0);
+                // } else {
+                //     g.camera.translate(0.0, -0.2, 0.0);
+                // }
                 break;
             case XK_r:
                 if (shift) {
@@ -915,6 +941,28 @@ void vecScale(Vec v, Flt s)
     v[2] *= s;
 }
 
+void drawPointer() {
+    float theta = 2 * 3.1415926 / float(p.nsegments); 
+	float c = cosf(theta); //precalculate the sine and cosine
+	float s = sinf(theta);
+	float t;
+
+	float x = p.radius; //we start at angle = 0 
+	float z = 0; 
+    
+	glBegin(GL_LINE_LOOP); 
+	for(int ii = 0; ii < p.nsegments; ii++) 
+	{ 
+		glVertex3f(x + p.pos[0], p.pos[1], z + p.pos[2]);//output vertex 
+        
+		//apply the rotation matrix
+		t = x;
+		x = c * x - s * z;
+		z = s * t + c * z;
+	} 
+	glEnd(); 
+}
+
 void drawSmoke()
 {
     if (g.sorting) {
@@ -1081,8 +1129,8 @@ void Global::render()
     //
     //drawGround();
     //
-   
-    g.moveInc += 0.1;
+    drawPointer();
+    //g.moveInc += 0.1;
 
     glColor3ub(100, 100, 100);
     drawObject(castle, 0.0,0.0,60.0);
