@@ -9,6 +9,7 @@
 //
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <math.h>
 #include <X11/Xlib.h>
 //X11 utilities not currently needed.
@@ -33,6 +34,7 @@ using namespace std;
 //some constants
 const Vec upv = {0.0, 1.0, 0.0};
 const int MAX_SMOKES = 400;
+const int MAX_HEALTH = 35; 
 
 //-----------------------------------------------------------------------------
 //Setup timers
@@ -378,9 +380,10 @@ class Global {
         GLfloat lightPosition[4];
         BlenderObject objs[10];
         int xDirs[10];
-        struct timespec smokeStart, smokeTime;
+        struct timespec smokeStart, smokeTime, healthStart, healthTime;
         Smoke *smoke;
         int nsmokes;
+        Flt health;
         Flt cameramat[4][4];
         ~Global() {
             if (smoke)
@@ -396,6 +399,7 @@ class Global {
             cameraAngle = 0.0;
             sorting = 1;
             billboarding = 1;
+            health = MAX_HEALTH;
             
             //VecMake(0.0, 1.0, 8.0, cameraPosition);
             //light is up high, right a little, toward a little
@@ -635,6 +639,9 @@ int Global::check_keys(XEvent *e)
             tab = 1;
             return 0;
         }
+        if (key == XK_a) {
+            g.health -= 0.02;
+        }
     }
     if (e->type == KeyRelease) {
         int key = (XLookupKeysym(&e->xkey, 0) & 0x0000ffff);
@@ -645,6 +652,9 @@ int Global::check_keys(XEvent *e)
         if (key == XK_Tab) {
             tab = 0;
             return 0;
+        }
+        if (key == XK_a) {
+            g.health -= 0.0002;
         }
     }
     if (e->type == KeyPress) {
@@ -694,10 +704,7 @@ int Global::check_keys(XEvent *e)
                 // }
                 break;
             case XK_r:
-                if (shift) {
-                    
-                }
-              	break;
+                break;
             case XK_Escape:
                 return 1;
         }
@@ -962,7 +969,31 @@ void drawPointer() {
 	} 
 	glEnd(); 
 }
+  
+void drawHealth() {
+    if(g.health >= 2*(MAX_HEALTH/3)){
+        glColor3ub(0,255,0);
+    }
+    else if(g.health < 2*(MAX_HEALTH/3) && g.health > MAX_HEALTH/3) {
+        glColor3ub(255,255,0);
+    }
+    else if(g.health <= MAX_HEALTH/3) {
+        glColor3ub(255,0,0);
+    }
+    glPushMatrix();
+    glRotatef(90, 0.0f, 1.0f, 0.0f);
+    glRects(-20,40,g.health-20,45); //x1,y1,x2,y2
+    glPopMatrix();
 
+    //create a key that decreases health more for a certain amount of time
+    
+//  glBegin(GL_QUADS);
+//     glVertex3f(10, 35, 1); //x1, y1, z
+//     glVertex3f(20, 35, 1); //x2, y1, z
+//     glVertex3f(20, 30, 1); //x2, y2, z
+//     glVertex3f(10, 30, 1); //x1, hy2, z
+//     glEnd();
+}
 void drawSmoke()
 {
     if (g.sorting) {
@@ -1092,6 +1123,14 @@ void Global::physics()
         }
         ++i;
     }
+    clock_gettime(CLOCK_REALTIME, &g.healthTime);
+        d = timeDiff(&g.healthStart, &g.healthTime);
+    if (d > 0.00001 && g.health > 0)  {
+        //time to make another smoke particle
+        g.health -= 0.0002;
+        timeCopy(&g.healthStart, &g.healthTime);
+    }
+    //create a new timer that puts damage from a certain attack
 }
 
 void drawObject(BlenderObject obj,Flt x, Flt y, Flt z) {
@@ -1131,6 +1170,8 @@ void Global::render()
     //
     drawPointer();
     //g.moveInc += 0.1;
+    
+    drawHealth();
 
     glColor3ub(100, 100, 100);
     drawObject(castle, 0.0,0.0,60.0);
@@ -1145,8 +1186,9 @@ void Global::render()
     glColor3ub(0, 0, 0);
     
     glDisable(GL_LIGHTING);
-    drawSmoke();
+    // drawSmoke();
     glEnable(GL_LIGHTING);
+    
 
     //switch to 2D mode
     //
