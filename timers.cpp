@@ -9,7 +9,7 @@
 
 //-----------------------------------------------------------------------------
 //Setup timers
-const double physicsRate = 1.0 / 60.0;
+//const double physicsRate = 1.0 / 60.0;
 const double oobillion = 1.0 / 1e9;
 struct timespec timeStart, timeCurrent;
 struct timespec timePause;
